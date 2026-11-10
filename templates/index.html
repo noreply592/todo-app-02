@@ -16,65 +16,134 @@
     .primary { background: #4f46e5; color: #fff; }
     .primary:hover { background: #4338ca; }
     .filters { display: flex; gap: 6px; margin: 16px 0 8px; align-items: center; }
-    .filters a { text-decoration: none; color: #6b7280; padding: 4px 10px; border-radius: 999px; font-size: 14px; }
-    .filters a.on { background: #eef2ff; color: #4f46e5; font-weight: bold; }
+    .filters button { background: transparent; color: #6b7280; padding: 4px 10px; border-radius: 999px; }
+    .filters button.on { background: #eef2ff; color: #4f46e5; font-weight: bold; }
     .filters .count { margin-left: auto; font-size: 13px; color: #6b7280; }
     ul { list-style: none; padding: 0; margin: 0; }
     li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
     li:last-child { border-bottom: 0; }
-    li form { margin: 0; }
-    .check { width: 26px; height: 26px; padding: 0; border: 2px solid #c7c9d1; background: #fff; border-radius: 50%; color: #fff; font-size: 14px; }
+    .check { width: 26px; height: 26px; padding: 0; border: 2px solid #c7c9d1; background: #fff; border-radius: 50%; color: #fff; font-size: 14px; flex: none; }
     li.done .check { background: #10b981; border-color: #10b981; }
-    .title-form { flex: 1; }
-    .title-form input { width: 100%; border: 1px solid transparent; background: transparent; padding: 6px 8px; }
-    .title-form input:focus { border-color: #d1d5db; background: #fff; outline: none; }
-    li.done .title-form input { text-decoration: line-through; color: #9ca3af; }
+    .title { flex: 1; width: 100%; border: 1px solid transparent; background: transparent; padding: 6px 8px; }
+    .title:focus { border-color: #d1d5db; background: #fff; outline: none; }
+    li.done .title { text-decoration: line-through; color: #9ca3af; }
     .del { background: transparent; color: #ef4444; padding: 6px 8px; }
     .del:hover { background: #fee2e2; }
-    .empty { text-align: center; color: #9ca3af; padding: 24px 0; }
+    .empty { justify-content: center; color: #9ca3af; padding: 24px 0; }
     .footer { text-align: right; margin-top: 12px; }
     .footer button { background: transparent; color: #6b7280; font-size: 13px; }
     .footer button:hover { color: #ef4444; }
+    .note { margin-top: 12px; font-size: 12px; color: #9ca3af; text-align: center; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>📝 할일 관리</h1>
     <div class="card">
-      <form class="add" action="{{ url_for('add') }}" method="post">
-        <input type="text" name="title" placeholder="할 일을 입력하세요" autofocus required>
+      <form class="add" id="addForm">
+        <input type="text" id="newTitle" placeholder="할 일을 입력하세요" autofocus required>
         <button class="primary" type="submit">추가</button>
       </form>
 
       <div class="filters">
-        <a href="{{ url_for('index', filter='all') }}" class="{{ 'on' if status == 'all' }}">전체</a>
-        <a href="{{ url_for('index', filter='active') }}" class="{{ 'on' if status == 'active' }}">진행중</a>
-        <a href="{{ url_for('index', filter='done') }}" class="{{ 'on' if status == 'done' }}">완료</a>
-        <span class="count">남은 할일 {{ remaining }}개</span>
+        <button type="button" data-filter="all">전체</button>
+        <button type="button" data-filter="active">진행중</button>
+        <button type="button" data-filter="done">완료</button>
+        <span class="count" id="count"></span>
       </div>
 
-      <ul>
-        {% for t in todos %}
-        <li class="{{ 'done' if t.done }}">
-          <form action="{{ url_for('toggle', todo_id=t.id) }}" method="post">
-            <button class="check" title="완료 표시">{{ '✓' if t.done }}</button>
-          </form>
-          <form class="title-form" action="{{ url_for('edit', todo_id=t.id) }}" method="post">
-            <input type="text" name="title" value="{{ t.title }}" title="수정 후 Enter">
-          </form>
-          <form action="{{ url_for('delete', todo_id=t.id) }}" method="post">
-            <button class="del" title="삭제">삭제</button>
-          </form>
-        </li>
-        {% else %}
-        <li class="empty">할 일이 없습니다 🎉</li>
-        {% endfor %}
-      </ul>
+      <ul id="list"></ul>
 
-      <form class="footer" action="{{ url_for('clear_done') }}" method="post">
-        <button type="submit">완료된 항목 지우기</button>
-      </form>
+      <div class="footer">
+        <button type="button" id="clearDone">완료된 항목 지우기</button>
+      </div>
     </div>
+    <p class="note">할일은 이 브라우저에만 저장됩니다.</p>
   </div>
+
+  <script>
+    const KEY = "todos";
+    let filter = "all";
+
+    function load() {
+      try { return JSON.parse(localStorage.getItem(KEY)) || []; }
+      catch (e) { return []; }
+    }
+    function save(todos) {
+      try { localStorage.setItem(KEY, JSON.stringify(todos)); } catch (e) {}
+    }
+    let todos = load();
+
+    function update(fn) { fn(); save(todos); render(); }
+
+    function render() {
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+      const shown = todos
+        .filter(t => filter === "all" || (filter === "done" ? t.done : !t.done))
+        .sort((a, b) => (a.done - b.done) || (b.id - a.id));
+
+      if (shown.length === 0) {
+        const li = document.createElement("li");
+        li.className = "empty";
+        li.textContent = "할 일이 없습니다 🎉";
+        list.appendChild(li);
+      }
+
+      for (const t of shown) {
+        const li = document.createElement("li");
+        if (t.done) li.className = "done";
+
+        const check = document.createElement("button");
+        check.className = "check";
+        check.title = "완료 표시";
+        check.textContent = t.done ? "✓" : "";
+        check.onclick = () => update(() => { t.done = !t.done; });
+
+        const title = document.createElement("input");
+        title.type = "text";
+        title.className = "title";
+        title.value = t.title;
+        title.title = "수정 후 Enter";
+        const commit = () => {
+          const v = title.value.trim();
+          if (v && v !== t.title) update(() => { t.title = v; });
+          else title.value = t.title;
+        };
+        title.onkeydown = e => { if (e.key === "Enter") title.blur(); };
+        title.onblur = commit;
+
+        const del = document.createElement("button");
+        del.className = "del";
+        del.title = "삭제";
+        del.textContent = "삭제";
+        del.onclick = () => update(() => { todos = todos.filter(x => x.id !== t.id); });
+
+        li.append(check, title, del);
+        list.appendChild(li);
+      }
+
+      document.getElementById("count").textContent =
+        `남은 할일 ${todos.filter(t => !t.done).length}개`;
+      document.querySelectorAll("[data-filter]").forEach(b =>
+        b.classList.toggle("on", b.dataset.filter === filter));
+    }
+
+    document.getElementById("addForm").onsubmit = e => {
+      e.preventDefault();
+      const input = document.getElementById("newTitle");
+      const v = input.value.trim();
+      if (!v) return;
+      const id = todos.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+      update(() => { todos.push({ id, title: v, done: false }); });
+      input.value = "";
+    };
+    document.querySelectorAll("[data-filter]").forEach(b =>
+      b.onclick = () => { filter = b.dataset.filter; render(); });
+    document.getElementById("clearDone").onclick = () =>
+      update(() => { todos = todos.filter(t => !t.done); });
+
+    render();
+  </script>
 </body>
 </html>
