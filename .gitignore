@@ -8,3 +8,7 @@ venv/
 todo.db
 .DS_Store
 Thumbs.db
+
+.vercel
+.vercel.old-*
+.env*
